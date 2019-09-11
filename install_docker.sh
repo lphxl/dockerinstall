@@ -15,6 +15,21 @@ if [[ -z "${USER}" ]]; then
 fi
 
 # FUNCTIONS:
+show_help() {
+echo -e '
+Usage: ./install_docker.sh [--interactive | --with-compose]
+Installs Docker and/or docker-compose on supported Linux distributions.
+
+-h --help	Shows this help dialog.
+--interactive	Allows more installation options.
+--with-compose	Additionally installs docker-compose.
+
+If run without parameters, docker will be installed,
+the current user will be added to the docker group,
+and docker will be enabled to start on boot.
+
+'
+}
 proxy_check() {
   if [ -n "$(grep interactive <<< "${@}")" ]; then
     echo -e '\n[INFO] This script cannot be run on a proxied network without modifying'
@@ -105,6 +120,11 @@ pkg_manager_config() {
 ###################################################################
 # START:
 ###################################################################
+
+# Show help:
+if [[ -n $(echo "${@}" | grep -E '(\-h)|(help)') ]]; then
+  show_help && exit
+fi
 
 # Check that the user is not behind a proxy:
 proxy_check
