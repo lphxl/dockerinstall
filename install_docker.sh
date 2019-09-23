@@ -4,7 +4,7 @@
 release_info="$(cat /etc/*-release)"
 ubuntu="$(grep 'ID=ubuntu' <<< "$release_info")"
 kali="$(grep 'ID=kali' <<< "$release_info")"
-debian="$(grep 'ID=debian' <<< "$release_info")"
+debian="$(grep -E '(ID=debian)|(ID=Raspbian)' <<< "$release_info")"
 arch="$(grep 'ID=arch' <<< "$release_info")"
 version_id="$(grep 'VERSION_ID' <<< "$release_info" | awk -F '"' '{print $2}' | cut -d'.' -f1)"
 VERSION="$(grep 'VERSION=' <<< "$release_info" | awk -F '(' '{print $2}' | cut -d')' -f1 | tr [:upper:] [:lower:] | awk '{print $1}' | awk 'NF>0')"
@@ -61,10 +61,24 @@ distro_check_active() {
   echo -e '\nSelect your Linux distribution:\n'
   echo '1) Kali'
   echo '2) Debian'
-  echo '3) Ubuntu'
-  echo '4) Arch'
+  echo '3) Raspbian'
+  echo '4) Ubuntu'
+  echo '5) Arch'
   echo
   read -p 'Distro Number: ' DISTRO
+  if [[ DISTRO -eq 1 ]]; then
+    export DISTRO_NAME='kali'
+  elif [[ DISTRO -eq 2 ]]; then
+    export DISTRO_NAME='debian'
+  elif [[ DISTRO -eq 3 ]]; then
+    export DISTRO_NAME='raspbian'
+  elif [[ DISTRO -eq 4 ]]; then
+    export DISTRO_NAME='ubuntu'
+  elif [[ DISTRO -eq 5 ]]; then
+    export DISTRO_NAME='arch'
+  else
+    not_supported
+  fi
 }
 distro_check_passive() {
   # FIND IF SUPPORTED:
@@ -80,14 +94,20 @@ distro_check_passive() {
     if [[ $version_id -lt 8 ]]; then
       not_supported
     fi
-  elif [[ -n $ubuntu ]]; then
+  elif [[ -n $raspbian ]]; then
     DISTRO=3
+    DISTRO_NAME='Raspbian'
+    if [[ $version_id -lt 8 ]]; then
+      not_supported
+    fi
+  elif [[ -n $ubuntu ]]; then
+    DISTRO=4
     DISTRO_NAME='ubuntu'
     if [[ $version_id -lt 16 ]]; then
       not_supported
     fi
   elif [[ -n $arch ]]; then
-    DISTRO=4
+    DISTRO=5
     DISTRO_NAME='arch'
   fi
 }
@@ -141,7 +161,7 @@ if [[ $docker = no ]]; then
   echo -e '\nBye.'
   exit
 else
-  if [[ ${@} = --interactive ]]; then
+  if [[ -n $(echo $* | grep 'interactive') ]]; then
     distro_check_active
   else
     distro_check_passive
@@ -163,31 +183,35 @@ else
 
   # DOWNLOAD DOCKER GPG KEY:
   echo -e '\n[INFO] Adding Docker GPG key...'
-  if [[ $DISTRO -eq 3 ]]; then
+  if [[ $DISTRO_NAME = ubuntu ]]; then
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  elif [[ $DISTRO -eq 4 ]]; then
+  elif [[ $DISTRO_NAME = arch ]]; then
     echo 'No need...you use Arch, btw.'
-  else
+  elif [[ $DISTRO_NAME = raspbian ]]; then
+    curl -fsSL https://download.docker.com/linux/raspbian/gpg | sudo apt-key add -
+  elif [[ $DISTRO_NAME = debian ]]; then
     curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
   fi
   error_check 'Problem adding Docker GPG key.'
 
   # REMOVE UNOFFICIAL PACKAGES:
-  if [[ $DISTRO -ne 4 ]]; then
+  if [[ $DISTRO_NAME != arch ]]; then
     echo -e '\n[INFO] Removing any existing unofficial Docker repositories...'
     ${PKG_MANAGER} remove --silent --yes docker docker-engine docker.io >/dev/null 2>&1
   fi
 
   # ADDING OFFICIAL REPOS:
   echo -e '\n[INFO] Adding Official Docker repository...'
-  if [[ $DISTRO -eq 1 ]]; then
+  if [[ $DISTRO_NAME = kali ]]; then
     echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
-  elif [[ $DISTRO -eq 2 ]]; then
+  elif [[ $DISTRO_NAME = debian ]]; then
     # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
     sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
-  elif [[ $DISTRO -eq 4 ]]; then
+  elif [[ $DISTRO_NAME = raspbian ]]; then
+    echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+  elif [[ $DISTRO_NAME = arch ]]; then
     echo 'No need...you use Arch, btw.'
-  else
+  elif [[ $DISTRO_NAME = ubuntu ]]; then
     # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
     sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
   fi
@@ -197,10 +221,10 @@ else
   echo -e '\n[INFO] Updating the package cache...'
   ${UPDATE_PKG_CACHE}
   echo -e '\n[INFO] Installing docker-ce...'
-  if [[ $DISTRO -ne 4 ]]; then
-    ${PKG_INSTALL} docker-ce
-  else
+  if [[ $DISTRO_NAME = arch ]]; then
     ${PKG_INSTALL} docker
+  else
+    ${PKG_INSTALL} docker-ce
   fi
   error_check 'Error installing Docker'
 

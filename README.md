@@ -1,5 +1,19 @@
 # dockerinstall.sh
 
+Supported Operating Systems:
+
+Debian
+
+Raspbian
+
+Ubuntu
+
+Kali 2018+ based on Debian Stretch
+
+Arch
+
+
+
 Usage: ./install_docker.sh [--interactive | --with-compose]
 
 Installs Docker and/or docker-compose on supported Linux distributions.
