@@ -158,10 +158,20 @@ pkg_manager_config() {
     fi
     UPDATE_PKG_CACHE="${PKG_MANAGER} -Sy"
     PKG_INSTALL="${PKG_MANAGER} -S"
-  elif command -v brew &> /dev/null; then
-    PKG_MANAGER='brew'
-    UPDATE_PKG_CACHE="${PKG_MANAGER} update"
-    PKG_INSTALL="${PKG_MANAGER} install"
+  elif [[ $DISTRO_NAME = macos ]]; then
+    if command -v brew &> /dev/null; then
+      PKG_MANAGER='brew'
+      UPDATE_PKG_CACHE="${PKG_MANAGER} update"
+      PKG_INSTALL="${PKG_MANAGER} install"
+    else
+      echo -e "\nThis installation requires the Homebrew package manager.\n"
+      read -p 'Do you wish to install Homebrew now? [y/n] ' homebrew
+      if [[ ($homebrew = y) || ($homebrew = yes) ]]; then
+        /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      else
+        not_supported
+      fi
+    fi
   else
     not_supported
   fi
