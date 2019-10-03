@@ -18,13 +18,16 @@
 ##############################################################################
 
 # Distro Version Info:
-release_info="$(cat /etc/*-release)"
-ubuntu="$(grep 'ID=ubuntu' <<< "$release_info")"
-kali="$(grep 'ID=kali' <<< "$release_info")"
-debian="$(grep -E '(ID=debian)|(ID=Raspbian)' <<< "$release_info")"
-arch="$(grep 'ID=arch' <<< "$release_info")"
-version_id="$(grep 'VERSION_ID' <<< "$release_info" | awk -F '"' '{print $2}' | cut -d'.' -f1)"
-VERSION="$(grep 'VERSION=' <<< "$release_info" | awk -F '(' '{print $2}' | cut -d')' -f1 | tr [:upper:] [:lower:] | awk '{print $1}' | awk 'NF>0')"
+macos="$(uname -a | grep Darwin)"
+if [[ -z $macos ]]; then
+  release_info="$(cat /etc/*-release)"
+  ubuntu="$(grep 'ID=ubuntu' <<< "$release_info")"
+  kali="$(grep 'ID=kali' <<< "$release_info")"
+  debian="$(grep -E '(ID=debian)|(ID=Raspbian)' <<< "$release_info")"
+  arch="$(grep 'ID=arch' <<< "$release_info")"
+  version_id="$(grep 'VERSION_ID' <<< "$release_info" | awk -F '"' '{print $2}' | cut -d'.' -f1)"
+  VERSION="$(grep 'VERSION=' <<< "$release_info" | awk -F '(' '{print $2}' | cut -d')' -f1 | tr [:upper:] [:lower:] | awk '{print $1}' | awk 'NF>0')"
+fi
 
 # Set $USER if unset:
 if [[ -z "${USER}" ]]; then
@@ -71,7 +74,7 @@ error_check() {
   fi
 }
 not_supported() {
-  echo -e '\n[ERROR] This script can currently only run on supported Debian-based distos...and Arch.'
+  echo -e '\n[ERROR] This script is not currently supported for your operating system.'
   exit 1
 }
 distro_check_active() {
@@ -81,18 +84,21 @@ distro_check_active() {
   echo '3) Raspbian'
   echo '4) Ubuntu'
   echo '5) Arch'
+  echo '6) MacOS 10.8+'
   echo
   read -p 'Distro Number: ' DISTRO
-  if [[ DISTRO -eq 1 ]]; then
+  if [[ $DISTRO -eq 1 ]]; then
     export DISTRO_NAME='kali'
-  elif [[ DISTRO -eq 2 ]]; then
+  elif [[ $DISTRO -eq 2 ]]; then
     export DISTRO_NAME='debian'
-  elif [[ DISTRO -eq 3 ]]; then
+  elif [[ $DISTRO -eq 3 ]]; then
     export DISTRO_NAME='raspbian'
-  elif [[ DISTRO -eq 4 ]]; then
+  elif [[ $DISTRO -eq 4 ]]; then
     export DISTRO_NAME='ubuntu'
-  elif [[ DISTRO -eq 5 ]]; then
+  elif [[ $DISTRO -eq 5 ]]; then
     export DISTRO_NAME='arch'
+  elif [[ $DISTRO -eq 6 ]]; then
+    export DISTRO_NAME='macos'
   else
     not_supported
   fi
@@ -126,6 +132,9 @@ distro_check_passive() {
   elif [[ -n $arch ]]; then
     DISTRO=5
     DISTRO_NAME='arch'
+  elif [[ -n $macos ]]; then
+    DISTRO=6
+    DISTRO_NAME='macos'
   fi
 }
 pkg_manager_config() {
@@ -149,6 +158,10 @@ pkg_manager_config() {
     fi
     UPDATE_PKG_CACHE="${PKG_MANAGER} -Sy"
     PKG_INSTALL="${PKG_MANAGER} -S"
+  elif command -v brew &> /dev/null; then
+    PKG_MANAGER='brew'
+    UPDATE_PKG_CACHE="${PKG_MANAGER} update"
+    PKG_INSTALL="${PKG_MANAGER} install"
   else
     not_supported
   fi
@@ -195,51 +208,80 @@ else
   # INSTALL DEPENDENCIES:
   echo -e '\n[INFO] Updating the package cache...'
   ${UPDATE_PKG_CACHE}
-  echo -e '\n[INFO] Installing Docker dependencies...'
-  ${PKG_INSTALL} sudo apt-transport-https ca-certificates curl software-properties-common
+  if [[ $DISTRO_NAME != macos ]]; then
+    echo -e '\n[INFO] Installing Docker dependencies...'
+    ${PKG_INSTALL} sudo apt-transport-https ca-certificates curl software-properties-common
+  fi
 
   # DOWNLOAD DOCKER GPG KEY:
-  echo -e '\n[INFO] Adding Docker GPG key...'
+  gpg_info() { echo -e '\n[INFO] Adding Docker GPG key...'; }
   if [[ $DISTRO_NAME = ubuntu ]]; then
+    gpg_info
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    error_check 'Problem adding Docker GPG key.'
   elif [[ $DISTRO_NAME = arch ]]; then
+    gpg_info
     echo 'No need...you use Arch, btw.'
+    error_check 'Problem adding Docker GPG key.'
   elif [[ $DISTRO_NAME = raspbian ]]; then
+    gpg_info
     curl -fsSL https://download.docker.com/linux/raspbian/gpg | sudo apt-key add -
+    error_check 'Problem adding Docker GPG key.'
   elif [[ $DISTRO_NAME = debian ]]; then
+    gpg_info
     curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+    error_check 'Problem adding Docker GPG key.'
   fi
-  error_check 'Problem adding Docker GPG key.'
 
   # REMOVE UNOFFICIAL PACKAGES:
-  if [[ $DISTRO_NAME != arch ]]; then
-    echo -e '\n[INFO] Removing any existing unofficial Docker repositories...'
+  removing() { echo -e '\n[INFO] Removing any existing unofficial Docker packages...'; }
+  if [[ ($DISTRO_NAME != arch) && ($DISTRO_NAME != macos) ]]; then
+    removing
     ${PKG_MANAGER} remove --silent --yes docker docker-engine docker.io >/dev/null 2>&1
   fi
-
-  # ADDING OFFICIAL REPOS:
-  echo -e '\n[INFO] Adding Official Docker repository...'
-  if [[ $DISTRO_NAME = kali ]]; then
-    echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
-  elif [[ $DISTRO_NAME = debian ]]; then
-    # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
-    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
-  elif [[ $DISTRO_NAME = raspbian ]]; then
-    echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
-  elif [[ $DISTRO_NAME = arch ]]; then
-    echo 'No need...you use Arch, btw.'
-  elif [[ $DISTRO_NAME = ubuntu ]]; then
-    # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
+  if [[ $DISTRO_NAME = macos ]]; then
+    removing
+    osascript -e 'quit app "Docker"'
+    brew uninstall docker docker-machine docker-comopose >/dev/null 2>&1
   fi
-  error_check 'Error adding Docker repository'
+
+  if [[ ($DISTRO_NAME != arch) || ($DISTRO_NAME != macos) ]]; then
+    # ADDING OFFICIAL REPOS:
+    docker_repo() { echo -e '\n[INFO] Adding Official Docker repository...'; }
+    if [[ $DISTRO_NAME = kali ]]; then
+      docker_repo
+      echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
+    elif [[ $DISTRO_NAME = debian ]]; then
+      docker_repo
+      # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
+    elif [[ $DISTRO_NAME = raspbian ]]; then
+      docker_repo
+      echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+    elif [[ $DISTRO_NAME = arch ]]; then
+      docker_repo
+      echo 'No need...you use Arch, btw.'
+    elif [[ $DISTRO_NAME = ubuntu ]]; then
+      docker_repo
+      # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
+    fi
+    error_check 'Error adding Docker repository'
+  fi
 
   # INSTALL DOCKER:
   echo -e '\n[INFO] Updating the package cache...'
   ${UPDATE_PKG_CACHE}
-  echo -e '\n[INFO] Installing docker-ce...'
+  echo -e '\n[INFO] Installing docker...'
   if [[ $DISTRO_NAME = arch ]]; then
     ${PKG_INSTALL} docker
+  elif [[ $DISTRO_NAME = macos ]]; then
+    if [[ -d /Applications/Docker.app ]]; then
+      osascript -e 'quit app "Docker"'
+      brew reinstall docker
+    else
+      brew cask install docker
+    fi
   else
     ${PKG_INSTALL} docker-ce
   fi
@@ -247,28 +289,32 @@ else
 
   # INSTALL DOCKER-COMPOSE:
   if [[ -n $(echo $* | grep 'with-compose') ]]; then
-    echo -e '\n[INFO] Installing docker-compose...'
-    ${PKG_INSTALL} docker-compose
-    error_check 'Error installing Docker Compose'
+    if [[ $DISTRO_NAME != macos ]]; then
+      echo -e '\n[INFO] Installing docker-compose...'
+      ${PKG_INSTALL} docker-compose
+      error_check 'Error installing Docker Compose'
+    fi
   fi
 
   # ADD NON-ROOT DOCKER USER:
-  if [[ -n $(echo $* | grep 'interactive') ]]; then
-    if [[ $LOGNAME != root ]]; then
-      echo -e "\nDocker can be run by normal users without having to use 'sudo'."
-      echo "You should first look into security implications of this functionality."
-      echo "You can always do this later as root by running the following command:"
-      echo "usermod -aG docker ${LOGNAME}"
-      echo -e '\nDo you wish to add the current user to the docker group?'
-      read -p '[yes/no] ' dockeruser
-    else
-      dockeruser=yes
+  if [[ $DISTRO_NAME != macos ]]; then
+    if [[ -n $(echo $* | grep 'interactive') ]]; then
+      if [[ $LOGNAME != root ]]; then
+        echo -e "\nDocker can be run by normal users without having to use 'sudo'."
+        echo "You should first look into security implications of this functionality."
+        echo "You can always do this later as root by running the following command:"
+        echo "usermod -aG docker ${LOGNAME}"
+        echo -e '\nDo you wish to add the current user to the docker group?'
+        read -p '[yes/no] ' dockeruser
+      else
+        dockeruser=yes
+      fi
     fi
-  fi
-  if [[ $dockeruser = yes ]]; then
-    sudo groupadd docker 2>/dev/null
-    sudo usermod -aG docker "${LOGNAME}"
-    echo -e "\n[INFO] You will need to run su - ${LOGNAME} to inherit docker group privileges."
+    if [[ $dockeruser = yes ]]; then
+      sudo groupadd docker 2>/dev/null
+      sudo usermod -aG docker "${LOGNAME}"
+      echo -e "\n[INFO] You will need to run su - ${LOGNAME} to inherit docker group privileges."
+    fi
   fi
 
   # ENABLE DOCKER:
@@ -280,16 +326,26 @@ else
   fi
   if [[ $enable = yes ]]; then
     echo -e '\n[INFO] Enabling Docker to start on boot...'
-    sudo systemctl enable docker
+    if [[ $DISTRO_NAME = macos ]]; then
+      osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Docker.app", hidden:true}' > /dev/null 2>&1
+    else
+      sudo systemctl enable docker
+    fi
   fi
   # START DOCKER
   echo -e '\n[INFO] Starting Docker...'
-  sudo systemctl start docker
+  if [[ $DISTRO_NAME = macos ]]; then
+    open /Applications/Docker.app
+  else
+    sudo systemctl start docker
+  fi
 fi
 
 # FINISH
 error_check 'Something went wrong.'
-if [[ $LOGNAME != root ]]; then
-  echo -e "\n[INFO] You may need to run su - ${USER} to inherit docker group privileges."
+if [[ $DISTRO_NAME != macos ]]; then
+  if [[ $LOGNAME != root ]]; then
+    echo -e "\n[INFO] You may need to run su - ${USER} to inherit docker group privileges."
+  fi
 fi
 echo -e '\n[SUCCESS] Installation Complete.'
