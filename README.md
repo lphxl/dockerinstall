@@ -11,8 +11,7 @@ Supported Operating Systems:
 
 (RPM-based distro support coming soon.)
 
-
-'''
+```
 Usage: ./install_docker.sh [--interactive | --with-compose]
 Installs Docker and/or docker-compose on supported Linux distributions.
 
@@ -25,4 +24,4 @@ Installs Docker and/or docker-compose on supported Linux distributions.
 If run without parameters, docker will be installed,
 the current user will be added to the docker group,
 and docker will be enabled to start on boot.
-'''
+```
