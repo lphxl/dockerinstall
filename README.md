@@ -1,4 +1,4 @@
-# dockerinstall.sh
+# The Almost Universal Docker Installer
 
 Supported Operating Systems:
 
