@@ -316,9 +316,9 @@ else
         echo "usermod -aG docker ${LOGNAME}"
         echo -e '\nDo you wish to add the current user to the docker group?'
         read -p '[yes/no] ' dockeruser
-      else
-        dockeruser=yes
       fi
+    else
+      dockeruser=yes
     fi
     if [[ $dockeruser = yes ]]; then
       sudo groupadd docker 2>/dev/null
