@@ -15,6 +15,13 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ##############################################################################
+if [[ -f logo.ansi ]]; then
+  cat logo.ansi
+elif [[ -n $(command -v curl) ]]; then
+  curl -skLf 'https://raw.githubusercontent.com/phx/dockerinstall/master/logo.ansi'
+fi
+
+echo -e 'Welcome to The Almost Universal Docker Installer.\n'
 
 # Distro Version Info:
 macos="$(uname -a | grep Darwin)"
