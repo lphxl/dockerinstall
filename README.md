@@ -1,3 +1,12 @@
+![Platform: all except RPM and Windows](https://img.shields.io/badge/platform-(%20!%20%3D%20RPM)%20%7C%7C%20(%20!%20%3D%20Windows%20)-orange)
+![Dependencies: BASH](https://img.shields.io/badge/dependencies-BASH-blue)
+![Version: Latest](https://img.shields.io/badge/version-latest-green)
+![Follow @rubynorails on Twitter](https://img.shields.io/twitter/follow/rubynorails?label=follow&style=social)
+
+
+![logo](./logo.png?raw=true)
+
+
 # The Almost Universal Docker Installer
 
 Supported Operating Systems:
