@@ -1,4 +1,4 @@
-![Platform: Linux](https://img.shields.io/badge/platform-Linux-blue)
+![Platform: Linux](https://img.shields.io/badge/platform-Linux%20and%20MacOS-blue)
 ![Dependencies: BASH](https://img.shields.io/badge/dependencies-BASH-blue)
 ![Version: Latest](https://img.shields.io/badge/version-latest-green)
 ![Follow @rubynorails on Twitter](https://img.shields.io/twitter/follow/rubynorails?label=follow&style=social)
