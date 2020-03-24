@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##############################################################################
 #    Copyright (C) 2018 phx <https://github.com/phx>
 #
@@ -15,6 +15,9 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ##############################################################################
+# /var/lib/docker is not removed when uninstalling previous versions of Docker
+##############################################################################
+
 if [[ -f logo.ansi ]]; then
   cat logo.ansi
 elif [[ -n $(command -v curl) ]]; then
@@ -27,12 +30,15 @@ echo -e 'Welcome to The Almost Universal Docker Installer.\n'
 macos="$(uname -a | grep Darwin)"
 if [[ -z $macos ]]; then
   release_info="$(cat /etc/*-release)"
-  ubuntu="$(grep 'ID=ubuntu' <<< "$release_info")"
-  kali="$(grep 'ID=kali' <<< "$release_info")"
-  debian="$(grep -E '(ID=debian)|(ID=Raspbian)' <<< "$release_info")"
-  arch="$(grep 'ID=arch' <<< "$release_info")"
-  version_id="$(grep 'VERSION_ID' <<< "$release_info" | awk -F '"' '{print $2}' | cut -d'.' -f1)"
-  VERSION="$(grep 'VERSION=' <<< "$release_info" | awk -F '(' '{print $2}' | cut -d')' -f1 | tr [:upper:] [:lower:] | awk '{print $1}' | awk 'NF>0')"
+  arch="$(echo "$release_info" | grep -i 'ID=arch')"
+  debian="$(echo "$release_info" | grep -i 'ID=debian')"
+  raspbian="$(echo "$release_info" | grep -i 'ID=Raspbian')"
+  kali="$(echo "$release_info" | grep -i 'ID=kali')"
+  fedora="$(echo "$release_info" | grep -i 'ID=fedora')"
+  ubuntu="$(echo "$release_info" | grep -i 'ID=ubuntu')"
+  version_id="$(echo "$release_info" | grep 'VERSION_ID' | awk -F '"' '{print $2}' | cut -d'.' -f1)"
+  # fedora $version_id determined later in script
+  VERSION="$(echo "$release_info" | grep 'VERSION=' | awk -F '(' '{print $2}' | cut -d')' -f1 | tr "[:upper:]" "[:lower:]" | awk '{print $1}' | awk 'NF>0')"
 fi
 
 # Set $USER if unset:
@@ -46,9 +52,9 @@ echo -e '
 Usage: ./install_docker.sh [--interactive | --with-compose]
 Installs Docker and/or docker-compose on supported Linux distributions.
 
--h --help	Shows this help dialog.
---interactive	Allows more installation options.
+--interactive	  Allows more installation options.
 --with-compose	Additionally installs docker-compose.
+--help	        Shows this help dialog.
 
 If run without parameters, docker will be installed,
 the current user will be added to the docker group,
@@ -57,13 +63,13 @@ and docker will be enabled to start on boot.
 '
 }
 proxy_check() {
-  if [ -n "$(grep interactive <<< "${@}")" ]; then
+  if [[ -n "$(echo "${@}" | grep interactive)" ]]; then
     echo -e '\n[INFO] This script cannot be run on a proxied network without modifying'
     echo -e '[INFO] $http_proxy, $https_proxy, and setting up both apt and docker proxy config files.'
     echo -e '[INFO] It is MANDATORY to run this script from a non-proxied, external ISP without prior config modification.'
     echo -e '\nARE YOU BEHIND A PROXY???'
-    read -p '[yes/no] ' proxy
-  elif [ -n "$http_proxy" -o -n "$http_proxy" ]; then
+    read -rp '[yes/no] ' proxy
+  elif [[ (-n "$http_proxy") || (-n "$http_proxy") ]]; then
     proxy='yes'
   else
     proxy='no'
@@ -75,7 +81,7 @@ proxy_check() {
 }
 error_check() {
   if [[ $? -ne 0 ]]; then
-    echo -e "\n[ERROR] ${@}"
+    echo -e "\n[ERROR] $*"
     exit
   fi
 }
@@ -85,25 +91,28 @@ not_supported() {
 }
 distro_check_active() {
   echo -e '\nSelect your Linux distribution:\n'
-  echo '1) Kali'
+  echo '1) Arch'
   echo '2) Debian'
-  echo '3) Raspbian'
-  echo '4) Ubuntu'
-  echo '5) Arch'
-  echo '6) MacOS 10.8+'
+  echo '3) Raspbian 8+'
+  echo '4) Fedora 30+'
+  echo '5) Kali 2018+'
+  echo '6) Ubuntu'
+  echo '7) MacOS 10.8+'
   echo
-  read -p 'Distro Number: ' DISTRO
+  read -rp 'Distro Number: ' DISTRO
   if [[ $DISTRO -eq 1 ]]; then
-    export DISTRO_NAME='kali'
+    export DISTRO_NAME='arch'
   elif [[ $DISTRO -eq 2 ]]; then
     export DISTRO_NAME='debian'
   elif [[ $DISTRO -eq 3 ]]; then
     export DISTRO_NAME='raspbian'
   elif [[ $DISTRO -eq 4 ]]; then
-    export DISTRO_NAME='ubuntu'
+    export DISTRO_NAME='fedora'
   elif [[ $DISTRO -eq 5 ]]; then
-    export DISTRO_NAME='arch'
+    export DISTRO_NAME='kali'
   elif [[ $DISTRO -eq 6 ]]; then
+    export DISTRO_NAME='ubuntu'
+  elif [[ $DISTRO -eq 7 ]]; then
     export DISTRO_NAME='macos'
   else
     not_supported
@@ -111,51 +120,48 @@ distro_check_active() {
 }
 distro_check_passive() {
   # FIND IF SUPPORTED:
-  if [[ -n $kali ]]; then
-    DISTRO=1
-    DISTRO_NAME='kali'
-    if [[ $version_id -lt 2018 ]]; then
-      not_supported
-    fi
+  if [[ -n $arch ]]; then
+    DISTRO_NAME='arch'
   elif [[ -n $debian ]]; then
-    DISTRO=2
     DISTRO_NAME='debian'
     if [[ $version_id -lt 8 ]]; then
       not_supported
     fi
   elif [[ -n $raspbian ]]; then
-    DISTRO=3
-    DISTRO_NAME='Raspbian'
+    DISTRO_NAME='raspbian'
     if [[ $version_id -lt 8 ]]; then
       not_supported
     fi
+  elif [[ -n $fedora ]]; then
+    DISTRO_NAME='fedora'
+    version_id=$(echo "$release_info" | grep 'VERSION_ID' | cut -d'=' -f2)
+    if [[ $version_id -lt 30 ]]; then
+      not_supported
+    fi
+  elif [[ -n $kali ]]; then
+    DISTRO_NAME='kali'
+    if [[ $version_id -lt 2018 ]]; then
+      not_supported
+    fi
   elif [[ -n $ubuntu ]]; then
-    DISTRO=4
     DISTRO_NAME='ubuntu'
     if [[ $version_id -lt 16 ]]; then
       not_supported
     fi
-  elif [[ -n $arch ]]; then
-    DISTRO=5
-    DISTRO_NAME='arch'
   elif [[ -n $macos ]]; then
-    DISTRO=6
     DISTRO_NAME='macos'
   fi
 }
 pkg_manager_config() {
-  # CONFIGURE PACKAGE MANAGER:
   if command -v apt-get &> /dev/null; then
-    # Determine if Debian-based distro:
     if [[ $USER != 'root' ]]; then
       PKG_MANAGER='sudo apt-get'
     else
       PKG_MANAGER='apt-get'
     fi
-    # Variable to store the command used to update the package cache:
     UPDATE_PKG_CACHE="${PKG_MANAGER} update"
-    # PKG_INSTALL="${PKG_MANAGER} --yes --no-install-recommends install"
     PKG_INSTALL="${PKG_MANAGER} --yes install"
+    PKG_REMOVE="${PKG_MANAGER} --silent --yes"
   elif command -v pacman &> /dev/null; then
     if [[ $USER != 'root' ]]; then
       PKG_MANAGER='sudo pacman'
@@ -164,14 +170,25 @@ pkg_manager_config() {
     fi
     UPDATE_PKG_CACHE="${PKG_MANAGER} -Sy"
     PKG_INSTALL="${PKG_MANAGER} -S"
-  elif [[ $DISTRO_NAME = macos ]]; then
+    PKG_REMOVE="${PKG_MANAGER} -Rsn"
+  elif command -v dnf &> /dev/null; then
+    if [[ $USER != 'root' ]]; then
+      PKG_MANAGER='sudo dnf'
+    else
+      PKG_MANAGER='dnf'
+    fi
+    UPDATE_PKG_CACHE="${PKG_MANAGER} check-update"
+    PKG_INSTALL="${PKG_MANAGER} install -y"
+    PKG_REMOVE="${PKG_MANAGER} remove -y"
+  elif [[ $DISTRO_NAME = "macos" ]]; then
     if command -v brew &> /dev/null; then
       PKG_MANAGER='brew'
       UPDATE_PKG_CACHE="${PKG_MANAGER} update"
       PKG_INSTALL="${PKG_MANAGER} install"
+      PKG_REMOVE="${PKG_MANAGER} uninstall"
     else
       echo -e "\nThis installation requires the Homebrew package manager.\n"
-      read -p 'Do you wish to install Homebrew now? [y/n] ' homebrew
+      read -rp 'Do you wish to install Homebrew now? [y/n] ' homebrew
       if [[ ($homebrew = y) || ($homebrew = yes) ]]; then
         /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
       else
@@ -180,6 +197,19 @@ pkg_manager_config() {
     fi
   else
     not_supported
+  fi
+}
+remove_packages() {
+  echo -e '\n[INFO] Removing any existing Docker packages...'
+  declare -a pkgs_to_remove=(docker docker.io docker-machine docker-compose docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine)
+  ${PKG_REMOVE} "${pkgs_to_remove[@]}" 2>/dev/null
+  if [[ $INTERACTIVE -eq 1 ]]; then
+    if [[ -d /var/lib/docker ]]; then
+      read -rp 'Do you want to remove /var/lib/docker, which contains any existing images? [y/n] ' remove_images
+      if [[ $remove_images = "y" ]]; then
+        sudo rm -rf /var/lib/docker
+      fi
+    fi
   fi
 }
 
@@ -198,7 +228,7 @@ proxy_check
 # INSTALL DOCKER:
 if [[ -n $(command -v docker) ]]; then
   echo -e 'Do you wish to reinstall Docker?'
-  read -p '[yes/no] ' docker
+  read -rp '[yes/no] ' docker
 else
   docker='yes'
 fi
@@ -207,7 +237,8 @@ if [[ $docker = no ]]; then
   echo -e '\nBye.'
   exit
 else
-  if [[ -n $(echo $* | grep 'interactive') ]]; then
+  if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
+    INTERACTIVE=1
     distro_check_active
   else
     distro_check_passive
@@ -216,7 +247,7 @@ else
   # CONFIGURE PACKAGE MANAGER:
   pkg_manager_config
 
-  if [ "$DISTRO" != "1" -a "$USER" = "root" ]; then
+  if [[ ($DISTRO_NAME != "kali") && ($USER = "root") ]]; then
     echo -e '\n[ERROR] This script should be run by a non-root user except on Kali Linux.'
     exit 1
   fi
@@ -224,63 +255,63 @@ else
   # INSTALL DEPENDENCIES:
   echo -e '\n[INFO] Updating the package cache...'
   ${UPDATE_PKG_CACHE}
-  if [[ $DISTRO_NAME != macos ]]; then
-    echo -e '\n[INFO] Installing Docker dependencies...'
+  echo -e '\n[INFO] Installing any necessary dependencies...'
+  if [[ -n $(echo "$PKG_MANAGER" | grep 'apt') ]]; then
     ${PKG_INSTALL} sudo apt-transport-https ca-certificates curl software-properties-common
+  else
+    ${PKG_INSTALL} sudo ca-certificates curl
+  fi
+  if [[ -n $(echo "$PKG_MANAGER" | grep 'dnf') ]]; then
+    ${PKG_INSTALL} dnf-plugins-core grubby
   fi
 
   # DOWNLOAD DOCKER GPG KEY:
   gpg_info() { echo -e '\n[INFO] Adding Docker GPG key...'; }
-  if [[ $DISTRO_NAME = ubuntu ]]; then
+  if [[ $DISTRO_NAME = "debian" ]]; then
     gpg_info
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
     error_check 'Problem adding Docker GPG key.'
-  elif [[ $DISTRO_NAME = arch ]]; then
-    gpg_info
-    echo 'No need...you use Arch, btw.'
-    error_check 'Problem adding Docker GPG key.'
-  elif [[ $DISTRO_NAME = raspbian ]]; then
+  elif [[ $DISTRO_NAME = "raspbian" ]]; then
     gpg_info
     curl -fsSL https://download.docker.com/linux/raspbian/gpg | sudo apt-key add -
     error_check 'Problem adding Docker GPG key.'
-  elif [[ $DISTRO_NAME = debian ]]; then
+  elif [[ $DISTRO_NAME = "fedora" ]]; then
     gpg_info
-    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+    sudo rpm --import https://download.docker.com/linux/fedora/gpg
+    sudo rpmkeys --import https://download.docker.com/linux/fedora/gpg
+  elif [[ $DISTRO_NAME = "ubuntu" ]]; then
+    gpg_info
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
     error_check 'Problem adding Docker GPG key.'
   fi
 
   # REMOVE UNOFFICIAL PACKAGES:
-  removing() { echo -e '\n[INFO] Removing any existing unofficial Docker packages...'; }
-  if [[ ($DISTRO_NAME != arch) && ($DISTRO_NAME != macos) ]]; then
-    removing
-    ${PKG_MANAGER} remove --silent --yes docker docker-engine docker.io >/dev/null 2>&1
-  fi
-  if [[ $DISTRO_NAME = macos ]]; then
-    removing
+  if [[ $DISTRO = "macos" ]]; then
     osascript -e 'quit app "Docker"'
-    brew uninstall docker docker-machine docker-comopose >/dev/null 2>&1
+    remove_packages
+  else
+    remove_packages
   fi
 
   if [[ ($DISTRO_NAME != arch) || ($DISTRO_NAME != macos) ]]; then
     # ADDING OFFICIAL REPOS:
     docker_repo() { echo -e '\n[INFO] Adding Official Docker repository...'; }
-    if [[ $DISTRO_NAME = kali ]]; then
-      docker_repo
-      echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
-    elif [[ $DISTRO_NAME = debian ]]; then
+    if [[ $DISTRO_NAME = "debian" ]]; then
       docker_repo
       # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
       sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
-    elif [[ $DISTRO_NAME = raspbian ]]; then
+    elif [[ $DISTRO_NAME = "raspbian" ]]; then
       docker_repo
       echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
-    elif [[ $DISTRO_NAME = arch ]]; then
+    elif [[ $DISTRO_NAME = "kali" ]]; then
       docker_repo
-      echo 'No need...you use Arch, btw.'
-    elif [[ $DISTRO_NAME = ubuntu ]]; then
+      echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
+    elif [[ $DISTRO_NAME = "ubuntu" ]]; then
       docker_repo
       # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
       sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
+    elif [[ $DISTRO_NAME = "fedora" ]]; then
+      sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
     fi
     error_check 'Error adding Docker repository'
   fi
@@ -289,9 +320,14 @@ else
   echo -e '\n[INFO] Updating the package cache...'
   ${UPDATE_PKG_CACHE}
   echo -e '\n[INFO] Installing docker...'
-  if [[ $DISTRO_NAME = arch ]]; then
+  if [[ $DISTRO_NAME = "arch" ]]; then
     ${PKG_INSTALL} docker
-  elif [[ $DISTRO_NAME = macos ]]; then
+  elif [[ $DISTRO_NAME = "fedora" ]]; then
+    ${PKG_INSTALL} docker-ce docker-ce-cli containerd.io
+    if [[ $version_id -ge 31 ]]; then
+      sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"
+    fi
+  elif [[ $DISTRO_NAME = "macos" ]]; then
     if [[ -d /Applications/Docker.app ]]; then
       osascript -e 'quit app "Docker"'
       brew reinstall docker
@@ -304,7 +340,7 @@ else
   error_check 'Error installing Docker'
 
   # INSTALL DOCKER-COMPOSE:
-  if [[ -n $(echo $* | grep 'with-compose') ]]; then
+  if [[ -n $(echo "${@}" | grep 'with-compose') ]]; then
     if [[ $DISTRO_NAME != macos ]]; then
       echo -e '\n[INFO] Installing docker-compose...'
       ${PKG_INSTALL} docker-compose
@@ -314,14 +350,14 @@ else
 
   # ADD NON-ROOT DOCKER USER:
   if [[ $DISTRO_NAME != macos ]]; then
-    if [[ -n $(echo $* | grep 'interactive') ]]; then
+    if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
       if [[ $LOGNAME != root ]]; then
         echo -e "\nDocker can be run by normal users without having to use 'sudo'."
         echo "You should first look into security implications of this functionality."
         echo "You can always do this later as root by running the following command:"
         echo "usermod -aG docker ${LOGNAME}"
         echo -e '\nDo you wish to add the current user to the docker group?'
-        read -p '[yes/no] ' dockeruser
+        read -rp '[yes/no] ' dockeruser
       fi
     else
       dockeruser=yes
@@ -334,9 +370,9 @@ else
   fi
 
   # ENABLE DOCKER:
-  if [[ -n $(echo $* | grep 'interactive') ]]; then
+  if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
     echo -e '\nDo you want Docker to start on boot?'
-    read -p '[yes/no] ' enable
+    read -rp '[yes/no] ' enable
   else
     enable=yes
   fi
