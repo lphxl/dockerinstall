@@ -24,14 +24,14 @@ I can't say for sure, because I've never even looked at Docker's convenience scr
 
 ## Tested and Supported Operating Systems:
 
+- MacOS 10.8+
+- Ubuntu
 - Debian 8+
 - Raspbian 8+
-- Ubuntu
 - Centos/RHEL/Amazon Linux
 - Fedora 30+
 - Arch
 - Kali 2018+ based on Debian Stretch
-- MacOS 10.8+
 
 ## Installation
 
