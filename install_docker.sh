@@ -20,7 +20,7 @@
 
 if [[ -f logo.ansi ]]; then
   cat logo.ansi
-elif [[ -n $(command -v curl) ]]; then
+elif command -v 'curl' &> /dev/null; then
   curl -skLf 'https://raw.githubusercontent.com/phx/dockerinstall/master/logo.ansi'
 fi
 
@@ -31,10 +31,11 @@ macos="$(uname -a | grep Darwin)"
 if [[ -z $macos ]]; then
   release_info="$(cat /etc/*-release)"
   arch="$(echo "$release_info" | grep -i 'ID=arch')"
+  centos="$(echo "$release_info" | grep -iE '(ID="centos")|(ID="rhel")|(ID="amzn")')"
   debian="$(echo "$release_info" | grep -i 'ID=debian')"
-  raspbian="$(echo "$release_info" | grep -i 'ID=Raspbian')"
-  kali="$(echo "$release_info" | grep -i 'ID=kali')"
   fedora="$(echo "$release_info" | grep -i 'ID=fedora')"
+  kali="$(echo "$release_info" | grep -i 'ID=kali')"
+  raspbian="$(echo "$release_info" | grep -i 'ID=Raspbian')"
   ubuntu="$(echo "$release_info" | grep -i 'ID=ubuntu')"
   version_id="$(echo "$release_info" | grep 'VERSION_ID' | awk -F '"' '{print $2}' | cut -d'.' -f1)"
   # fedora $version_id determined later in script
@@ -90,30 +91,33 @@ not_supported() {
   exit 1
 }
 distro_check_active() {
-  echo -e '\nSelect your Linux distribution:\n'
-  echo '1) Arch'
-  echo '2) Debian'
-  echo '3) Raspbian 8+'
-  echo '4) Fedora 30+'
-  echo '5) Kali 2018+'
-  echo '6) Ubuntu'
-  echo '7) MacOS 10.8+'
+  echo -e '\nSelect your distribution:\n'
+  echo '1) MacOS 10.8+'
+  echo '2) Ubuntu'
+  echo '3) Debian 8+'
+  echo '4) Raspbian 8+'
+  echo '5) CentOS/Amazon/RHEL'
+  echo '6) Fedora 30+'
+  echo '7) Arch'
+  echo '8) Kali 2018+'
   echo
   read -rp 'Distro Number: ' DISTRO
   if [[ $DISTRO -eq 1 ]]; then
-    export DISTRO_NAME='arch'
-  elif [[ $DISTRO -eq 2 ]]; then
-    export DISTRO_NAME='debian'
-  elif [[ $DISTRO -eq 3 ]]; then
-    export DISTRO_NAME='raspbian'
-  elif [[ $DISTRO -eq 4 ]]; then
-    export DISTRO_NAME='fedora'
-  elif [[ $DISTRO -eq 5 ]]; then
-    export DISTRO_NAME='kali'
-  elif [[ $DISTRO -eq 6 ]]; then
-    export DISTRO_NAME='ubuntu'
-  elif [[ $DISTRO -eq 7 ]]; then
     export DISTRO_NAME='macos'
+  elif [[ $DISTRO -eq 2 ]]; then
+    export DISTRO_NAME='ubuntu'
+  elif [[ $DISTRO -eq 3 ]]; then
+    export DISTRO_NAME='debian'
+  elif [[ $DISTRO -eq 4 ]]; then
+    export DISTRO_NAME='raspbian'
+  elif [[ $DISTRO -eq 5 ]]; then
+    export DISTRO_NAME='centos'
+  elif [[ $DISTRO -eq 6 ]]; then
+    export DISTRO_NAME='fedora'
+  elif [[ $DISTRO -eq 7 ]]; then
+    export DISTRO_NAME='arch'
+  elif [[ $DISTRO -eq 8 ]]; then
+    export DISTRO_NAME='kali'
   else
     not_supported
   fi
@@ -138,6 +142,8 @@ distro_check_passive() {
     if [[ $version_id -lt 30 ]]; then
       not_supported
     fi
+  elif [[ -n $centos ]]; then
+    DISTRO_NAME='centos'
   elif [[ -n $kali ]]; then
     DISTRO_NAME='kali'
     if [[ $version_id -lt 2018 ]]; then
@@ -169,8 +175,17 @@ pkg_manager_config() {
       PKG_MANAGER='pacman'
     fi
     UPDATE_PKG_CACHE="${PKG_MANAGER} -Sy"
-    PKG_INSTALL="${PKG_MANAGER} -S"
-    PKG_REMOVE="${PKG_MANAGER} -Rsn"
+    PKG_INSTALL="${PKG_MANAGER} --noconfirm -S"
+    PKG_REMOVE="${PKG_MANAGER} --noconfirm -Rsn"
+  elif [[ $DISTRO = "centos" ]]; then
+    if [[ $USER != 'root' ]]; then
+      PKG_MANAGER='sudo yum'
+    else
+      PKG_MANAGER='yum'
+    fi
+    UPDATE_PKG_CACHE="${PKG_MANAGER} check-update"
+    PKG_INSTALL="${PKG_MANAGER} install -y"
+    PKG_REMOVE="${PKG_MANAGER} remove -y"
   elif command -v dnf &> /dev/null; then
     if [[ $USER != 'root' ]]; then
       PKG_MANAGER='sudo dnf'
@@ -222,182 +237,234 @@ if [[ -n $(echo "${@}" | grep -E '(\-h)|(help)') ]]; then
   show_help && exit
 fi
 
+# Check for interaction:
+if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
+  INTERACTIVE=1
+fi
+
 # Check that the user is not behind a proxy:
 proxy_check
 
 # INSTALL DOCKER:
-if [[ -n $(command -v docker) ]]; then
-  echo -e 'Do you wish to reinstall Docker?'
-  read -rp '[yes/no] ' docker
+if [[ $INTERACTIVE -eq 1 ]]; then
+  docker='yes'
+  if command -v 'docker' &> /dev/null; then
+    read -rp 'Do you wish to reinstall Docker? [yes/no] ' docker
+  fi
 else
   docker='yes'
 fi
 
-if [[ $docker = no ]]; then
-  echo -e '\nBye.'
+if [[ $docker != "yes" ]]; then
+  echo -e '\nDocker appears to already be installed.'
   exit
+fi
+
+if [[ $INTERACTIVE -eq 1 ]]; then
+  distro_check_active
 else
-  if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
-    INTERACTIVE=1
-    distro_check_active
-  else
-    distro_check_passive
-  fi
+  distro_check_passive
+fi
 
-  # CONFIGURE PACKAGE MANAGER:
-  pkg_manager_config
+# CONFIGURE PACKAGE MANAGER:
+pkg_manager_config
 
-  if [[ ($DISTRO_NAME != "kali") && ($USER = "root") ]]; then
-    echo -e '\n[ERROR] This script should be run by a non-root user except on Kali Linux.'
-    exit 1
-  fi
+if [[ ($DISTRO_NAME != "kali") && ($USER = "root") ]]; then
+  echo -e '\n[ERROR] This script should be run by a non-root user except on Kali Linux.'
+  exit 1
+fi
 
-  # INSTALL DEPENDENCIES:
-  echo -e '\n[INFO] Updating the package cache...'
-  ${UPDATE_PKG_CACHE}
-  echo -e '\n[INFO] Installing any necessary dependencies...'
-  if [[ -n $(echo "$PKG_MANAGER" | grep 'apt') ]]; then
-    ${PKG_INSTALL} sudo apt-transport-https ca-certificates curl software-properties-common
-  else
-    ${PKG_INSTALL} sudo ca-certificates curl
+# INSTALL DEPENDENCIES:
+echo -e '\n[INFO] Updating the package cache...'
+${UPDATE_PKG_CACHE}
+echo -e '\n[INFO] Installing any necessary dependencies...'
+if [[ -n $(echo "$PKG_MANAGER" | grep 'apt') ]]; then
+  ${PKG_INSTALL} sudo apt-transport-https ca-certificates curl software-properties-common
+else
+  ${PKG_INSTALL} sudo ca-certificates curl
+fi
+if [[ $DISTRO_NAME = "fedora" ]]; then
+  ${PKG_INSTALL} dnf-plugins-core grubby
+fi
+if [[ $DISTRO_NAME = "centos" ]]; then
+  ${PKG_INSTALL} yum-utils
+  if [[ -z $(${PKG_MANAGER} repolist | grep -i 'Extras') ]]; then
+    ${PKG_MANAGER} config-manager --set-enabled extras
+    ${UPDATE_PKG_CACHE}
   fi
-  if [[ -n $(echo "$PKG_MANAGER" | grep 'dnf') ]]; then
-    ${PKG_INSTALL} dnf-plugins-core grubby
-  fi
+  ${PKG_INSTALL} device-mapper-persistent-data lvm2
+fi
 
-  # DOWNLOAD DOCKER GPG KEY:
-  gpg_info() { echo -e '\n[INFO] Adding Docker GPG key...'; }
+# DOWNLOAD DOCKER GPG KEY:
+gpg_info() { echo -e '\n[INFO] Adding Docker GPG key...'; }
+if [[ $DISTRO_NAME = "debian" ]]; then
+  gpg_info
+  curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+  error_check 'Problem adding Docker GPG key.'
+elif [[ $DISTRO_NAME = "raspbian" ]]; then
+  gpg_info
+  curl -fsSL https://download.docker.com/linux/raspbian/gpg | sudo apt-key add -
+  error_check 'Problem adding Docker GPG key.'
+elif [[ $DISTRO_NAME = "fedora" ]]; then
+  gpg_info
+  sudo rpm --import https://download.docker.com/linux/fedora/gpg
+  sudo rpmkeys --import https://download.docker.com/linux/fedora/gpg
+  error_check 'Problem adding Docker GPG key.'
+elif [[ $DISTRO_NAME = "centos" ]]; then
+  gpg_info
+  sudo rpm --import https://download.docker.com/linux/centos/gpg
+  sudo rpmkeys --import https://download.docker.com/linux/centos/gpg
+  error_check 'Problem adding Docker GPG key.'
+elif [[ $DISTRO_NAME = "ubuntu" ]]; then
+  gpg_info
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  error_check 'Problem adding Docker GPG key.'
+fi
+
+# REMOVE UNOFFICIAL PACKAGES:
+if [[ $DISTRO = "macos" ]]; then
+  osascript -e 'quit app "Docker"'
+  remove_packages
+else
+  remove_packages
+fi
+
+if [[ ($DISTRO_NAME != arch) || ($DISTRO_NAME != macos) ]]; then
+  # ADDING OFFICIAL REPOS:
+  docker_repo() { echo -e '\n[INFO] Adding Official Docker repository...'; }
   if [[ $DISTRO_NAME = "debian" ]]; then
-    gpg_info
-    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
-    error_check 'Problem adding Docker GPG key.'
+    docker_repo
+    # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
   elif [[ $DISTRO_NAME = "raspbian" ]]; then
-    gpg_info
-    curl -fsSL https://download.docker.com/linux/raspbian/gpg | sudo apt-key add -
-    error_check 'Problem adding Docker GPG key.'
-  elif [[ $DISTRO_NAME = "fedora" ]]; then
-    gpg_info
-    sudo rpm --import https://download.docker.com/linux/fedora/gpg
-    sudo rpmkeys --import https://download.docker.com/linux/fedora/gpg
+    docker_repo
+    echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+  elif [[ $DISTRO_NAME = "kali" ]]; then
+    docker_repo
+    echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
   elif [[ $DISTRO_NAME = "ubuntu" ]]; then
-    gpg_info
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    error_check 'Problem adding Docker GPG key.'
-  fi
-
-  # REMOVE UNOFFICIAL PACKAGES:
-  if [[ $DISTRO = "macos" ]]; then
-    osascript -e 'quit app "Docker"'
-    remove_packages
-  else
-    remove_packages
-  fi
-
-  if [[ ($DISTRO_NAME != arch) || ($DISTRO_NAME != macos) ]]; then
-    # ADDING OFFICIAL REPOS:
-    docker_repo() { echo -e '\n[INFO] Adding Official Docker repository...'; }
-    if [[ $DISTRO_NAME = "debian" ]]; then
-      docker_repo
-      # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
-      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian ${VERSION} stable"
-    elif [[ $DISTRO_NAME = "raspbian" ]]; then
-      docker_repo
-      echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
-    elif [[ $DISTRO_NAME = "kali" ]]; then
-      docker_repo
-      echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
-    elif [[ $DISTRO_NAME = "ubuntu" ]]; then
-      docker_repo
-      # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
-    elif [[ $DISTRO_NAME = "fedora" ]]; then
-      sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-    fi
-    error_check 'Error adding Docker repository'
-  fi
-
-  # INSTALL DOCKER:
-  echo -e '\n[INFO] Updating the package cache...'
-  ${UPDATE_PKG_CACHE}
-  echo -e '\n[INFO] Installing docker...'
-  if [[ $DISTRO_NAME = "arch" ]]; then
-    ${PKG_INSTALL} docker
+    docker_repo
+    # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${VERSION} stable"
   elif [[ $DISTRO_NAME = "fedora" ]]; then
-    ${PKG_INSTALL} docker-ce docker-ce-cli containerd.io
-    if [[ $version_id -ge 31 ]]; then
-      sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"
-    fi
-  elif [[ $DISTRO_NAME = "macos" ]]; then
-    if [[ -d /Applications/Docker.app ]]; then
-      osascript -e 'quit app "Docker"'
-      brew reinstall docker
-    else
-      brew cask install docker
-    fi
+    sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+  elif [[ $DISTRO_NAME = "centos" ]]; then
+    sudo yum config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  fi
+  error_check 'Error adding Docker repository'
+fi
+
+# TOUCH WORKAROUND FOR OVERLAY2 FS ON CENTOS PRIOR TO RHEL/CentOS 6.8/7.2:
+if [[ ($DISTRO_NAME = "centos") ]]; then
+  sudo touch /var/lib/rpm/*
+fi 
+
+# INSTALL DOCKER:
+echo -e '\n[INFO] Updating the package cache...'
+${UPDATE_PKG_CACHE}
+echo -e '\n[INFO] Installing docker...'
+if [[ $DISTRO_NAME = "arch" ]]; then
+  ${PKG_INSTALL} docker
+elif [[ $DISTRO_NAME = "fedora" ]]; then
+  ${PKG_INSTALL} docker-ce docker-ce-cli containerd.io
+  if [[ $version_id -ge 31 ]]; then
+    sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"
+  fi
+elif [[ $DISTRO_NAME = "centos" ]]; then
+  ${PKG_INSTALL} --nobest docker-ce docker-ce-cli containerd.io
+elif [[ $DISTRO_NAME = "macos" ]]; then
+  if [[ -d /Applications/Docker.app ]]; then
+    osascript -e 'quit app "Docker"'
+    brew reinstall docker
   else
-    ${PKG_INSTALL} docker-ce
+    brew cask install docker
   fi
-  error_check 'Error installing Docker'
+else
+  ${PKG_INSTALL} docker-ce
+fi
+error_check 'Error installing Docker'
 
-  # INSTALL DOCKER-COMPOSE:
-  if [[ -n $(echo "${@}" | grep 'with-compose') ]]; then
-    if [[ $DISTRO_NAME != macos ]]; then
-      echo -e '\n[INFO] Installing docker-compose...'
-      ${PKG_INSTALL} docker-compose
-      error_check 'Error installing Docker Compose'
-    fi
+# INSTALL DOCKER-COMPOSE:
+if [[ -n $(echo "${@}" | grep 'with-compose') ]]; then
+  if [[ ($DISTRO_NAME != "macos") && ($DISTRO_NAME != "centos") ]]; then
+    echo -e '\n[INFO] Installing docker-compose...'
+    ${PKG_INSTALL} docker-compose
+    error_check 'Error installing Docker Compose'
+  elif [[ $DISTRO_NAME = "centos" ]]; then
+    ${PKG_INSTALL} python3 python3-pip
+    pip3 install docker-compose --user
   fi
+fi
 
-  # ADD NON-ROOT DOCKER USER:
-  if [[ $DISTRO_NAME != macos ]]; then
-    if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
-      if [[ $LOGNAME != root ]]; then
-        echo -e "\nDocker can be run by normal users without having to use 'sudo'."
-        echo "You should first look into security implications of this functionality."
-        echo "You can always do this later as root by running the following command:"
-        echo "usermod -aG docker ${LOGNAME}"
-        echo -e '\nDo you wish to add the current user to the docker group?'
-        read -rp '[yes/no] ' dockeruser
-      fi
-    else
-      dockeruser=yes
-    fi
-    if [[ $dockeruser = yes ]]; then
-      sudo groupadd docker 2>/dev/null
-      sudo usermod -aG docker "${LOGNAME}"
-      echo -e "\n[INFO] You will need to run su - ${LOGNAME} to inherit docker group privileges."
-    fi
-  fi
-
-  # ENABLE DOCKER:
+# ADD NON-ROOT DOCKER USER:
+if [[ $DISTRO_NAME != "macos" ]]; then
   if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
-    echo -e '\nDo you want Docker to start on boot?'
-    read -rp '[yes/no] ' enable
-  else
-    enable=yes
-  fi
-  if [[ $enable = yes ]]; then
-    echo -e '\n[INFO] Enabling Docker to start on boot...'
-    if [[ $DISTRO_NAME = macos ]]; then
-      osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Docker.app", hidden:true}' > /dev/null 2>&1
-    else
-      sudo systemctl enable docker
+    if [[ $LOGNAME != root ]]; then
+      echo -e "\nDocker can be run by normal users without having to use 'sudo'."
+      echo "You should first look into security implications of this functionality."
+      echo "You can always do this later as root by running the following command:"
+      echo "usermod -aG docker ${LOGNAME}"
+      echo -e '\nDo you wish to add the current user to the docker group?'
+      read -rp '[yes/no] ' dockeruser
     fi
-  fi
-  # START DOCKER
-  echo -e '\n[INFO] Starting Docker...'
-  if [[ $DISTRO_NAME = macos ]]; then
-    open /Applications/Docker.app
   else
-    sudo systemctl start docker
+    dockeruser=yes
   fi
+  if [[ $dockeruser = "yes" ]]; then
+    sudo groupadd docker 2>/dev/null
+    sudo usermod -aG docker "${LOGNAME}"
+    echo -e "\n[INFO] You will need to run su - ${LOGNAME} to inherit docker group privileges."
+  fi
+fi
+
+# ENABLE DOCKER:
+if [[ -n $(echo "${@}" | grep 'interactive') ]]; then
+  echo -e '\nDo you want Docker to start on boot?'
+  read -rp '[yes/no] ' enable
+else
+  enable=yes
+fi
+if [[ $enable = "yes" ]]; then
+  echo -e '\n[INFO] Enabling Docker to start on boot...'
+  if [[ $DISTRO_NAME = macos ]]; then
+    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Docker.app", hidden:true}' > /dev/null 2>&1
+  else
+    sudo systemctl enable docker
+  fi
+fi
+
+# START DOCKER
+echo -e '\n[INFO] Starting Docker...'
+if [[ $DISTRO_NAME = "macos" ]]; then
+  open /Applications/Docker.app
+else
+  sudo systemctl start docker
+fi
+
+# CENTOS - CONFIGURE DOCKER TO USE OVERLAY2 DRIVER:
+if [[ $DISTRO_NAME = "centos" ]]; then
+  sudo systemctl stop docker
+  sudo cp -au /var/lib/docker /var/lib/docker.bk
+  echo -e '{\n  "storage-driver": "overlay2"\n}' | sudo tee '/etc/docker/daemon.json' >/dev/null 2>&1
+  sudo systemctl start docker
 fi
 
 # FINISH
 error_check 'Something went wrong.'
-if [[ $DISTRO_NAME != macos ]]; then
-  if [[ $LOGNAME != root ]]; then
+if [[ $DISTRO_NAME != "macos" ]]; then
+  if [[ $LOGNAME != "root" ]]; then
     echo -e "\n[INFO] You may need to run su - ${USER} to inherit docker group privileges."
+  fi
+fi
+if [[ $DISTRO_NAME = "centos" ]]; then
+  echo -e '\nYou may need to create firewall rules or disable firewalld in order to enable DNS resolution inside of containers.'
+  echo -e 'A reboot may be required afterwards.'
+  if [[ $INTERACTIVE -eq 1 ]]; then
+    read -rp 'Would you like to disable firewalld? [yes/no] ' disable_firewall
+    if [[ $disable_firewall = "yes" ]]; then
+      sudo systemctl stop firewalld
+      sudo systemctl disable firewalld
+    fi
   fi
 fi
 echo -e '\n[SUCCESS] Installation Complete.'
