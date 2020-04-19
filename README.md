@@ -33,12 +33,28 @@ I can't say for sure, because I've never even looked at Docker's convenience scr
 - Arch
 - Kali 2018+
 
-## Installation
+## Interactive Installation
 
 ```
 git clone https://github.com/phx/dockerinstall.git
 cd dockerinstall
 ./install_docker.sh --interactive
+```
+
+## Passive Installation
+
+- `curl -fskSL 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
+
+(or)
+
+- `wget --no-check-certificate -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
+
+(or)
+
+```
+git clone https://github.com/phx/dockerinstall.git
+cd dockerinstall
+./install_docker.sh
 ```
 
 ## Usage
