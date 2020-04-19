@@ -31,7 +31,7 @@ I can't say for sure, because I've never even looked at Docker's convenience scr
 - Centos/RHEL/Amazon Linux
 - Fedora 30+
 - Arch
-- Kali 2018+ based on Debian Stretch
+- Kali 2018+
 
 ## Installation
 
