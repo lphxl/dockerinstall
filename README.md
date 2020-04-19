@@ -43,11 +43,11 @@ cd dockerinstall
 
 ## Passive Installation
 
-- `curl -fskSL 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
+`curl -fskSL 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
 
 (or)
 
-- `wget --no-check-certificate -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
+`wget --no-check-certificate -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
 
 (or)
 
