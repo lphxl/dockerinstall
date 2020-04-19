@@ -37,7 +37,7 @@ if [[ -z $macos ]]; then
   kali="$(echo "$release_info" | grep -i 'ID=kali')"
   raspbian="$(echo "$release_info" | grep -i 'ID=Raspbian')"
   ubuntu="$(echo "$release_info" | grep -i 'ID=ubuntu')"
-  version_id="$(echo "$release_info" | grep 'VERSION_ID' | awk -F '"' '{print $2}' | cut -d'.' -f1)"
+  version_id=$(echo "$release_info" | grep 'VERSION_ID' | awk -F '"' '{print $2}' | cut -d'.' -f1)
   # fedora $version_id determined later in script
   VERSION="$(echo "$release_info" | grep 'VERSION=' | awk -F '(' '{print $2}' | cut -d')' -f1 | tr "[:upper:]" "[:lower:]" | awk '{print $1}' | awk 'NF>0')"
 fi
@@ -341,7 +341,11 @@ if [[ ($DISTRO_NAME != arch) || ($DISTRO_NAME != macos) ]]; then
     echo "deb https://download.docker.com/linux/raspbian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
   elif [[ $DISTRO_NAME = "kali" ]]; then
     docker_repo
-    echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
+    if [[ $version_id -ge 2020 ]]; then
+      echo 'deb https://download.docker.com/linux/debian buster stable' | sudo tee /etc/apt/sources.list.d/docker.list
+    else
+      echo 'deb https://download.docker.com/linux/debian stretch stable' | sudo tee /etc/apt/sources.list.d/docker.list
+    fi
   elif [[ $DISTRO_NAME = "ubuntu" ]]; then
     docker_repo
     # sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
@@ -357,7 +361,7 @@ fi
 # TOUCH WORKAROUND FOR OVERLAY2 FS ON CENTOS PRIOR TO RHEL/CentOS 6.8/7.2:
 if [[ ($DISTRO_NAME = "centos") ]]; then
   sudo touch /var/lib/rpm/*
-fi 
+fi
 
 # INSTALL DOCKER:
 echo -e '\n[INFO] Updating the package cache...'
