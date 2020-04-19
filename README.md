@@ -47,7 +47,7 @@ cd dockerinstall
 
 (or)
 
-`wget --no-check-certificate -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
+`wget -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh 2>/dev/null' | bash`
 
 (or)
 
