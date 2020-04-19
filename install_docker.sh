@@ -297,7 +297,7 @@ fi
 
 # DOWNLOAD DOCKER GPG KEY:
 gpg_info() { echo -e '\n[INFO] Adding Docker GPG key...'; }
-if [[ $DISTRO_NAME = "debian" ]]; then
+if [[ ($DISTRO_NAME = "debian") || ($DISTRO_NAME = "kali") ]]; then
   gpg_info
   curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
   error_check 'Problem adding Docker GPG key.'
