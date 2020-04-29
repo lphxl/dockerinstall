@@ -41,15 +41,13 @@ cd dockerinstall
 ./install_docker.sh --interactive
 ```
 
-## Passive Installation
+## Passive Installation Options
+- `curl -fsSL https://tinyurl.com/dockerinstaller | bash`
+- `curl -fsSL https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh | bash`
+- `wget -O - https://tinyurl.com/dockerinstaller 2>/dev/null | bash`
+- `wget -O - https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh 2>/dev/null | bash`
 
-`curl -fskSL 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh' | bash`
-
-(or)
-
-`wget -O - 'https://raw.githubusercontent.com/phx/dockerinstall/master/install_docker.sh 2>/dev/null' | bash`
-
-(or)
+or the safer alternative:
 
 ```
 git clone https://github.com/phx/dockerinstall.git
